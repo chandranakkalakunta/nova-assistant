@@ -1,0 +1,6 @@
+google-genai
+tavily-python
+streamlit
+wikipedia-api
+python-dotenv
+requests
