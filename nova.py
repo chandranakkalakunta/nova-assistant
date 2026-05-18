@@ -7,14 +7,28 @@ from tools import (
     find_restaurants, find_hotels, get_fitness_plan
 )
 
+# ── Observability ──────────────────────────────────────────
+from observability import (
+    log_startup,
+    log_request_start,
+    log_request_end,
+    log_tool_execution,
+    log_gemini_call,
+    log_error,
+)
+
 # ── Configuration ──────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
+# Log startup so we can verify deployments in Cloud Logging
+log_startup()
+
 # ── Nova's Personality ─────────────────────────────────────
 today = datetime.now().strftime("%A, %B %d, %Y")
-NOVA_SYSTEM_PROMPT = f"""You are Nova, a warm, intelligent and 
-highly capable personal AI assistant for Chandra Nakkalakunta, 
+
+NOVA_SYSTEM_PROMPT = f"""You are Nova, a warm, intelligent and
+highly capable personal AI assistant for Chandra Nakkalakunta,
 a Principal Cloud & AI/ML Architect based in Hyderabad, India.
 
 Today is {today}.
@@ -65,7 +79,7 @@ RESPONSE STYLE:
 """
 
 # ── Agent Planning ─────────────────────────────────────────
-def plan_tools(question: str) -> dict:
+def plan_tools(question: str, request_id: str) -> dict:
     """Ask Gemini which tools to use"""
     planning_prompt = f"""
 {NOVA_SYSTEM_PROMPT}
@@ -74,36 +88,46 @@ User message: "{question}"
 
 Decide which tools to use. Respond ONLY with valid JSON:
 {{
-    "needs_tools": true/false,
-    "tools": ["tool1", "tool2"],
-    "queries": {{
-        "search_jobs": "specific job search query",
-        "plan_holiday": "specific holiday query",
-        "analyze_stock": "specific stock query",
-        "find_restaurants": "specific restaurant query",
-        "find_hotels": "specific hotel query",
-        "get_fitness_plan": "specific fitness query"
-    }},
-    "reasoning": "why these tools"
+  "needs_tools": true/false,
+  "tools": ["tool1", "tool2"],
+  "queries": {{
+    "search_jobs": "specific job search query",
+    "plan_holiday": "specific holiday query",
+    "analyze_stock": "specific stock query",
+    "find_restaurants": "specific restaurant query",
+    "find_hotels": "specific hotel query",
+    "get_fitness_plan": "specific fitness query"
+  }},
+  "reasoning": "why these tools"
 }}
 
 Only include tools that are actually needed.
 If just a greeting or general question, set needs_tools to false.
 """
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=planning_prompt
-    )
+
+    with log_gemini_call("planning", request_id) as ctx:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=planning_prompt
+        )
+        # Capture token usage if available
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            ctx["input_tokens"] = getattr(response.usage_metadata, "prompt_token_count", 0)
+            ctx["output_tokens"] = getattr(response.usage_metadata, "candidates_token_count", 0)
+            ctx["total_tokens"] = getattr(response.usage_metadata, "total_token_count", 0)
+
     text = response.text.strip()
     text = text.replace("```json", "").replace("```", "").strip()
+
     try:
         return json.loads(text)
     except:
         return {"needs_tools": False, "tools": [], "queries": {}, "reasoning": "fallback"}
 
+
 # ── Execute Tools ──────────────────────────────────────────
-def execute_tools(plan: dict) -> dict:
-    """Execute the planned tools"""
+def execute_tools(plan: dict, request_id: str) -> dict:
+    """Execute the planned tools with per-tool observability"""
     tool_map = {
         "search_jobs": search_jobs,
         "plan_holiday": plan_holiday,
@@ -112,15 +136,29 @@ def execute_tools(plan: dict) -> dict:
         "find_hotels": find_hotels,
         "get_fitness_plan": get_fitness_plan
     }
+
     results = {}
+
     for tool in plan.get("tools", []):
         if tool in tool_map:
             query = plan.get("queries", {}).get(tool, "")
-            results[tool] = tool_map[tool](query)
+
+            try:
+                with log_tool_execution(tool, query, request_id) as ctx:
+                    result = tool_map[tool](query)
+                    ctx["result_size"] = len(str(result))
+                    results[tool] = result
+
+            except Exception as e:
+                # Log already happened inside context manager
+                # Return graceful degradation — don't fail entire request
+                results[tool] = f"[Tool unavailable: {type(e).__name__}]"
+
     return results
 
+
 # ── Synthesize Answer ──────────────────────────────────────
-def synthesize(question: str, tool_results: dict) -> str:
+def synthesize(question: str, tool_results: dict, request_id: str) -> str:
     """Generate Nova's final response"""
     if tool_results:
         context = "\n\n".join([
@@ -147,47 +185,68 @@ Chandra said: "{question}"
 Respond naturally as Nova. If it's a greeting,
 welcome Chandra warmly and briefly explain what you can help with.
 """
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
+
+    with log_gemini_call("synthesis", request_id) as ctx:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            ctx["input_tokens"] = getattr(response.usage_metadata, "prompt_token_count", 0)
+            ctx["output_tokens"] = getattr(response.usage_metadata, "candidates_token_count", 0)
+            ctx["total_tokens"] = getattr(response.usage_metadata, "total_token_count", 0)
+
     return response.text
 
+
 # ── Main Nova Function ─────────────────────────────────────
-def ask_nova(question: str) -> dict:
+def ask_nova(question: str, session_id: str = None) -> dict:
     """Main entry point — ask Nova anything"""
-    print(f"\n🌟 Nova processing: {question}")
 
-    # Step 1 — Plan
-    plan = plan_tools(question)
-    print(f"🧠 Plan: {plan.get('reasoning', '')}")
-    print(f"🔧 Tools: {plan.get('tools', [])}")
+    # Start request tracking
+    req_ctx = log_request_start(question, session_id)
+    request_id = req_ctx["request_id"]
 
-    # Step 2 — Execute tools
-    tool_results = {}
-    if plan.get("needs_tools"):
-        tool_results = execute_tools(plan)
+    try:
+        # Step 1 — Plan (with Gemini call logging)
+        plan = plan_tools(question, request_id)
 
-    # Step 3 — Synthesize
-    answer = synthesize(question, tool_results)
+        # Step 2 — Execute tools (with per-tool logging)
+        tool_results = {}
+        if plan.get("needs_tools"):
+            tool_results = execute_tools(plan, request_id)
 
-    return {
-        "answer": answer,
-        "tools_used": plan.get("tools", []),
-        "reasoning": plan.get("reasoning", "")
-    }
+        # Step 3 — Synthesize (with Gemini call logging)
+        answer = synthesize(question, tool_results, request_id)
+
+        # Log successful request completion
+        log_request_end(req_ctx, plan.get("tools", []), success=True)
+
+        return {
+            "answer": answer,
+            "tools_used": plan.get("tools", []),
+            "reasoning": plan.get("reasoning", ""),
+            "request_id": request_id,  # Return for UI correlation
+        }
+
+    except Exception as e:
+        log_error("Nova request failed unexpectedly", e, request_id)
+        log_request_end(req_ctx, [], success=False)
+        raise
+
 
 # ── Test ───────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("🌟 Testing Nova...\n")
+    print("🌟 Testing Nova with observability...\n")
     print("=" * 50)
 
-    # Test greeting
     result = ask_nova("Hello Nova!")
     print(f"Nova: {result['answer']}")
     print(f"Tools used: {result['tools_used']}")
+    print(f"Request ID: {result['request_id']}")
+
     print("\n" + "=" * 50)
 
-    # Test fitness
     result = ask_nova("What's my workout for today?")
     print(f"Nova: {result['answer'][:500]}")
+    print(f"Request ID: {result['request_id']}")
