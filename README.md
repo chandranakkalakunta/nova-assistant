@@ -4,7 +4,7 @@
 
 Nova is a personalized AI assistant built on Google Cloud Platform, powered by Google Gemini 2.5 Flash. Nova knows who you are, understands your schedule, and helps you with jobs, travel, fitness, stocks, and more — all in one place.
 
-🌐 **Live Demo:** [https://nova-assistant-327358117698.us-central1.run.app](https://nova-assistant-327358117698.us-central1.run.app)
+🌐 **Live Demo:** [https://nova-assistant-716553701658.us-central1.run.app](https://nova-assistant-716553701658.us-central1.run.app)
 
 ---
 
@@ -83,6 +83,55 @@ User Question
 
 ---
 
+## 📊 Observability
+
+Nova has production-grade structured observability built in via `observability.py`.
+Every request is fully instrumented across 3 layers:
+
+```
+Layer 1 — Request logging
+  → request_start: question preview, session_id
+  → request_end:   latency_ms, tools_used, success/failure
+
+Layer 2 — Tool execution logging
+  → tool_start:   tool_name, query
+  → tool_success: tool_name, latency_ms, result_size
+  → tool_error:   tool_name, error_type, error_message
+
+Layer 3 — Gemini call logging
+  → gemini_call_success: call_type, latency_ms, input_tokens,
+                         output_tokens, total_tokens
+  → gemini_call_error:   call_type, latency_ms, error_type
+```
+
+Logs are structured JSON ingested automatically by **Google Cloud Logging**.
+
+### Querying logs in Cloud Logging
+
+```
+# All Nova logs
+resource.type="cloud_run_revision"
+
+# Slow tool executions
+resource.type="cloud_run_revision"
+jsonPayload.event="tool_success"
+jsonPayload.latency_ms > 3000
+
+# All errors
+resource.type="cloud_run_revision"
+jsonPayload.event="tool_error"
+
+# Trace a specific request end-to-end
+resource.type="cloud_run_revision"
+jsonPayload.request_id="req_1234567890"
+
+# Gemini token usage
+resource.type="cloud_run_revision"
+jsonPayload.event="gemini_call_success"
+```
+
+---
+
 ## 🛠️ Tech Stack
 
 | Component | Technology |
@@ -94,6 +143,20 @@ User Question
 | Containerization | Docker |
 | Cloud Deployment | Google Cloud Run |
 | Image Registry | Google Artifact Registry |
+| Observability | Google Cloud Logging (structured JSON) |
+
+---
+
+## ☁️ GCP Project Details
+
+| Resource | Value |
+|----------|-------|
+| Project ID | `nova-assistant-chandra` |
+| Project Number | `716553701658` |
+| Region | `us-central1` |
+| Artifact Registry | `nova-repo` |
+| Cloud Run Service | `nova-assistant` |
+| Live URL | `https://nova-assistant-716553701658.us-central1.run.app` |
 
 ---
 
@@ -125,6 +188,7 @@ Every response is tailored — Nova never forgets who she's talking to!
 - Python 3.11+
 - Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 - Tavily API key from [Tavily](https://tavily.com)
+- Google Cloud SDK (`gcloud`) installed and authenticated
 
 ### Local Setup
 
@@ -155,14 +219,18 @@ Open your browser at `http://localhost:8501`
 ## 🐳 Docker Deployment
 
 ```bash
+# Set your API keys first
+export GEMINI_API_KEY="your-gemini-key"
+export TAVILY_API_KEY="your-tavily-key"
+
 # Build for AMD64 (Cloud Run requirement)
 docker buildx build --platform linux/amd64 \
-  -t us-central1-docker.pkg.dev/YOUR_PROJECT/YOUR_REPO/nova-assistant:latest \
+  -t us-central1-docker.pkg.dev/nova-assistant-chandra/nova-repo/nova-assistant:latest \
   --push .
 
 # Deploy to Cloud Run
 gcloud run deploy nova-assistant \
-  --image us-central1-docker.pkg.dev/YOUR_PROJECT/YOUR_REPO/nova-assistant:latest \
+  --image us-central1-docker.pkg.dev/nova-assistant-chandra/nova-repo/nova-assistant:latest \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
@@ -170,6 +238,9 @@ gcloud run deploy nova-assistant \
   --memory 2Gi \
   --port 8080
 ```
+
+> ⚠️ Always verify `echo $GEMINI_API_KEY` and `echo $TAVILY_API_KEY` are non-empty
+> before deploying. Empty env vars are a common deployment pitfall.
 
 ---
 
@@ -180,6 +251,7 @@ nova-assistant/
 ├── app.py              # Streamlit web UI with chat interface
 ├── nova.py             # Nova's brain — agent logic & personality
 ├── tools.py            # 6 specialized tools
+├── observability.py    # Structured logging for Cloud Logging
 ├── Dockerfile          # Container configuration
 ├── .dockerignore       # Docker build exclusions
 ├── requirements.txt    # Python dependencies
@@ -191,14 +263,22 @@ nova-assistant/
 
 ## 🗺️ Roadmap
 
-### Phase 2 (Coming Soon)
+### Phase 2 — Observability & Monitoring (In Progress)
+- [x] ✅ Structured JSON logging — Cloud Logging
+- [x] ✅ Per-request latency tracking
+- [x] ✅ Per-tool execution logging
+- [x] ✅ Gemini token usage logging
+- [ ] 📊 Cloud Monitoring dashboard — latency & error rate charts
+- [ ] 🔔 Alerting — notify on error rate spikes or latency threshold breach
+
+### Phase 3 — Advanced Features (Coming Soon)
 - [ ] 🎙️ Voice interface — speak to Nova, Nova speaks back
 - [ ] 📱 PWA — installable on Android home screen
 - [ ] 🧠 Memory across sessions
 - [ ] 📅 Proactive daily briefings
 - [ ] 🏨 Hotel & restaurant booking integration
 
-### Phase 3 (Future)
+### Phase 4 — Future
 - [ ] Native Android app
 - [ ] iOS support
 - [ ] Calendar integration

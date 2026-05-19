@@ -5,6 +5,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY nova.py .
 COPY tools.py .
+COPY observability.py .
 EXPOSE 8080
 CMD ["streamlit", "run", "app.py", \
      "--server.port=8080", \
