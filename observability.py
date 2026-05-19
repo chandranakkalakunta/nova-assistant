@@ -60,11 +60,15 @@ def log_request_start(question: str, session_id: Optional[str] = None) -> dict:
     """
     Log the start of a user request. Returns context for downstream logging.
     """
+
     context = {
-        "request_id": f"req_{int(time.time() * 1000)}",
+        "request_id": f"req_{uuid.uuid4().hex[:12]}",
         "session_id": session_id or "anonymous",
         "start_time": time.time(),
-    }
+    }  
+
+
+
 
     _emit(
         severity="INFO",
