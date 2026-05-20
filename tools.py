@@ -2,10 +2,11 @@ import os
 import requests
 from datetime import datetime
 from tavily import TavilyClient
+from observability import get_secret
 import wikipediaapi
 
 # ── Configuration ──────────────────────────────────────────
-TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
+TAVILY_API_KEY = get_secret("tavily-api-key")
 tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
 wiki = wikipediaapi.Wikipedia(language='en', user_agent='NovaAssistant/1.0')
 

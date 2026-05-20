@@ -9,6 +9,7 @@ from tools import (
 
 # ── Observability ──────────────────────────────────────────
 from observability import (
+    get_secret,
     log_startup,
     log_request_start,
     log_request_end,
@@ -18,7 +19,7 @@ from observability import (
 )
 
 # ── Configuration ──────────────────────────────────────────
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_API_KEY = get_secret("gemini-api-key")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Log startup so we can verify deployments in Cloud Logging
@@ -250,3 +251,4 @@ if __name__ == "__main__":
     result = ask_nova("What's my workout for today?")
     print(f"Nova: {result['answer'][:500]}")
     print(f"Request ID: {result['request_id']}")
+# test

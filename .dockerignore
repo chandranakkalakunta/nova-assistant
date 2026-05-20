@@ -1,6 +1,28 @@
-venv/
+# Python cache
 __pycache__/
-*.pyc
-.DS_Store
+*.py[cod]
+*.pyo
+
+# Virtual environment (BIGGEST WIN!)
+venv/
+env/
+.env/
+
+# Git history
+.git/
+.gitignore
+
+# Development files
+*.md
+README*
 .env
-*.json
+tests/
+test_*.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker files themselves
+.dockerignore

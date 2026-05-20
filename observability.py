@@ -217,6 +217,39 @@ def log_error(message: str, error: Exception, request_id: str = "unknown", **ext
     )
 
 
+
+# ── Secret Manager ─────────────────────────────────────────
+def get_secret(secret_id: str) -> str:
+    """
+    Fetch secret from Secret Manager.
+    Falls back to environment variable locally.
+    """
+    if not IS_CLOUD_RUN:
+        # Local development → use env vars
+        value = os.environ.get(secret_id.upper().replace("-", "_"))
+        if value:
+            return value
+        raise ValueError(f"Environment variable {secret_id} not set!")
+
+    try:
+        from google.cloud import secretmanager
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/latest"
+        response = client.access_secret_version(name=name)
+        _emit("INFO", f"Secret fetched successfully",
+              event="secret_fetch",
+              secret_id=secret_id)
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        _emit("ERROR", f"Secret fetch failed: {secret_id}",
+              event="secret_fetch_error",
+              secret_id=secret_id,
+              error=str(e))
+        # Fallback to env var
+        return os.environ.get(
+            secret_id.upper().replace("-","_"), ""
+        )
+
 # ── Startup log ────────────────────────────────────────────
 def log_startup():
     """Log service startup — useful for deployment verification."""
