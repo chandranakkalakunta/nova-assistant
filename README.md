@@ -260,6 +260,19 @@ Open your browser at `http://localhost:8501`
 
 ## 🐳 Docker Deployment
 
+### Quick Deploy (Recommended!)
+One command handles everything:
+```bash
+./deploy.sh
+```
+This automatically:
+1. Builds Docker image
+2. Gets correct manifest digest
+3. Signs with KMS (RSA 4096-bit)
+4. Deploys with Binary Authorization
+
+### Manual Deploy
+
 ```bash
 # Build for AMD64 (Cloud Run requirement)
 # Note: API keys are securely stored in Secret Manager
