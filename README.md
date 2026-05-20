@@ -165,6 +165,9 @@ No other permissions granted — principle of least privilege! ✅
 - ✅ Audit trail of all secret access
 - ✅ Keys rotatable without redeployment
 - ✅ Docker build optimized (.dockerignore — 93% faster!)
+- ✅ Binary Authorization (only signed images deploy!)
+- ✅ KMS cryptographic signing (RSA 4096-bit)
+- ✅ Supply chain attack prevention
 
 ---
 
