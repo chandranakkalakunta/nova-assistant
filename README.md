@@ -132,6 +132,42 @@ jsonPayload.event="gemini_call_success"
 
 ---
 
+
+## 🔐 Security Architecture
+
+Nova implements production-grade security:
+
+### Secret Management
+API keys stored in **Google Cloud Secret Manager** — never in environment variables or code:
+
+```bash
+# Secrets stored securely
+gcloud secrets list --project=nova-assistant-chandra
+# gemini-api-key  → Gemini API key (encrypted at rest)
+# tavily-api-key  → Tavily API key (encrypted at rest)
+```
+
+### Service Account (Least Privilege)
+Nova runs as dedicated `nova-sa` service account with minimum required permissions:
+
+| Permission | Purpose |
+|------------|---------|
+| `secretmanager.secretAccessor` | Read API keys from Secret Manager |
+| `aiplatform.user` | Call Gemini API |
+| `logging.logWriter` | Write structured logs |
+
+No other permissions granted — principle of least privilege! ✅
+
+### Security Best Practices
+- ✅ No hardcoded credentials anywhere in code
+- ✅ API keys encrypted at rest in Secret Manager
+- ✅ Dedicated service account per application
+- ✅ Audit trail of all secret access
+- ✅ Keys rotatable without redeployment
+- ✅ Docker build optimized (.dockerignore — 93% faster!)
+
+---
+
 ## 🛠️ Tech Stack
 
 | Component | Technology |
@@ -144,6 +180,8 @@ jsonPayload.event="gemini_call_success"
 | Cloud Deployment | Google Cloud Run |
 | Image Registry | Google Artifact Registry |
 | Observability | Google Cloud Logging (structured JSON) |
+| Secret Management | Google Cloud Secret Manager |
+| Identity & Access | Google Cloud IAM + Service Accounts |
 
 ---
 
@@ -228,13 +266,14 @@ docker buildx build --platform linux/amd64 \
   -t us-central1-docker.pkg.dev/nova-assistant-chandra/nova-repo/nova-assistant:latest \
   --push .
 
-# Deploy to Cloud Run
+# Deploy to Cloud Run with Secret Manager
 gcloud run deploy nova-assistant \
   --image us-central1-docker.pkg.dev/nova-assistant-chandra/nova-repo/nova-assistant:latest \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars GEMINI_API_KEY=$GEMINI_API_KEY,TAVILY_API_KEY=$TAVILY_API_KEY \
+  --service-account=nova-sa@nova-assistant-chandra.iam.gserviceaccount.com \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,TAVILY_API_KEY=tavily-api-key:latest \
   --memory 2Gi \
   --port 8080
 ```
@@ -255,6 +294,7 @@ nova-assistant/
 ├── Dockerfile          # Container configuration
 ├── .dockerignore       # Docker build exclusions
 ├── requirements.txt    # Python dependencies
+├── .dockerignore       # Docker build exclusions (93% faster builds!)
 ├── .gitignore          # Git exclusions
 └── README.md           # This file
 ```
@@ -263,13 +303,19 @@ nova-assistant/
 
 ## 🗺️ Roadmap
 
-### Phase 2 — Observability & Monitoring (In Progress)
+### Phase 2 — Security & Observability (Completed ✅)
 - [x] ✅ Structured JSON logging — Cloud Logging
-- [x] ✅ Per-request latency tracking
-- [x] ✅ Per-tool execution logging
-- [x] ✅ Gemini token usage logging
-- [ ] 📊 Cloud Monitoring dashboard — latency & error rate charts
-- [ ] 🔔 Alerting — notify on error rate spikes or latency threshold breach
+- [x] ✅ Per-request UUID tracking
+- [x] ✅ Per-tool execution logging with timing
+- [x] ✅ Gemini token usage tracking (cost monitoring)
+- [x] ✅ Health check endpoint (port 8081)
+- [x] ✅ Uptime monitoring (global, 5-min intervals)
+- [x] ✅ Alert policy (email notification on downtime)
+- [x] ✅ Secret Manager (encrypted API key storage)
+- [x] ✅ Dedicated Service Account (least privilege)
+- [x] ✅ Docker optimization (.dockerignore — 212s → 15s builds!)
+- [ ] 📊 Cloud Monitoring dashboard
+- [ ] 🔔 Error rate alerting
 
 ### Phase 3 — Advanced Features (Coming Soon)
 - [ ] 🎙️ Voice interface — speak to Nova, Nova speaks back
