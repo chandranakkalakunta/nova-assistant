@@ -292,9 +292,8 @@ nova-assistant/
 ├── tools.py            # 6 specialized tools
 ├── observability.py    # Structured logging for Cloud Logging
 ├── Dockerfile          # Container configuration
-├── .dockerignore       # Docker build exclusions
-├── requirements.txt    # Python dependencies
 ├── .dockerignore       # Docker build exclusions (93% faster builds!)
+├── requirements.txt    # Python dependencies
 ├── .gitignore          # Git exclusions
 └── README.md           # This file
 ```
