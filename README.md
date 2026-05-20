@@ -242,7 +242,8 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Set API keys
+# Set API keys for LOCAL development only
+# (On Cloud Run, keys come from Secret Manager automatically!)
 export GEMINI_API_KEY="your-gemini-key"
 export TAVILY_API_KEY="your-tavily-key"
 
@@ -257,11 +258,9 @@ Open your browser at `http://localhost:8501`
 ## 🐳 Docker Deployment
 
 ```bash
-# Set your API keys first
-export GEMINI_API_KEY="your-gemini-key"
-export TAVILY_API_KEY="your-tavily-key"
-
 # Build for AMD64 (Cloud Run requirement)
+# Note: API keys are securely stored in Secret Manager
+# No need to set environment variables!
 docker buildx build --platform linux/amd64 \
   -t us-central1-docker.pkg.dev/nova-assistant-chandra/nova-repo/nova-assistant:latest \
   --push .
